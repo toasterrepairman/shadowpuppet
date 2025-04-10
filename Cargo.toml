@@ -1,0 +1,14 @@
+[package]
+name = "shadowpuppet"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+adw = { version = "0.7.2", package = "libadwaita" }
+cairo = "0.0.4"
+cairo-rs = "0.20.7"
+gdk-pixbuf = "0.20.9"
+gdk4 = "0.9.6"
+glib = "0.20.9"
+gtk4 = "0.9.6"
+image = "0.25.6"
