@@ -54,9 +54,9 @@
         cargoLock.lockFile = ./Cargo.lock;
 
         postBuild = ''
-          install -Dt $out/share/applications resources/groucho.desktop
+          install -Dt $out/share/applications resources/shadowpuppet.desktop
 
-          install -Dt $out/share/icons resources/icon-groucho.png
+          install -Dt $out/share/icons resources/icon-shadowpuppet.png
         '';
       };
     in {
@@ -67,7 +67,7 @@
       };
 
       meta = with nixpkgs.lib; {
-        description = "groucho";
+        description = "shadowpuppet";
         license = licenses.gpl3;
         platforms = platforms.all;
       };
