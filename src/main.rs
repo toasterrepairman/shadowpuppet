@@ -88,16 +88,18 @@ fn build_ui(app: &Application) {
     slider.set_draw_value(true);
     slider.set_margin_start(0);
     slider.set_margin_end(18);
-    slider.set_margin_top(6);
-    slider.set_margin_bottom(6);
+    slider.set_margin_top(0);
+    slider.set_margin_bottom(12);
     slider.set_hexpand(true);
+    slider.set_vexpand(false);
 
     // Create a SpinButton for numeric entry
     let spin_button = gtk4::SpinButton::with_range(2.0, 64.0, 1.0);
-    spin_button.set_value(8.0); // Match slider's default
-    spin_button.set_digits(0); // Show only integer values
-    spin_button.set_width_chars(3); // Make it compact
+    spin_button.set_value(8.0);
+    spin_button.set_digits(0);
+    spin_button.set_width_chars(3);
     spin_button.set_vexpand(false);
+    spin_button.set_valign(gtk4::Align::Center);
 
     // Create a horizontal box for slider and spin button
     let slider_box = gtk4::Box::builder()
@@ -105,8 +107,7 @@ fn build_ui(app: &Application) {
         .spacing(6)
         .margin_start(12)
         .margin_end(12)
-        .margin_top(6)
-        .margin_bottom(6)
+        .margin_top(0)
         .hexpand(true)
         .build();
 
