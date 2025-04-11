@@ -70,7 +70,7 @@ fn build_ui(app: &Application) {
     let save_button = gtk4::Button::from_icon_name("document-save-symbolic");
 
     // Create the WindowTitle and store it in an Rc<RefCell> (for adjusting later)
-    let window_title = adw::WindowTitle::new("Depthmap App", "");
+    let window_title = adw::WindowTitle::new("Shadowpuppet", "");
     let window_title = Rc::new(RefCell::new(window_title));
 
     let header = adw::HeaderBar::builder()
