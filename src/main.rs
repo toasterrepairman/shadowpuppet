@@ -87,7 +87,7 @@ fn build_ui(app: &Application) {
     slider.set_value(8.0);
     slider.set_draw_value(true);
     slider.set_margin_start(0);
-    slider.set_margin_end(12);
+    slider.set_margin_end(18);
     slider.set_margin_top(6);
     slider.set_margin_bottom(6);
     slider.set_hexpand(true);
@@ -148,7 +148,7 @@ fn build_ui(app: &Application) {
         .orientation(gtk4::Orientation::Vertical)
         .spacing(6)
         .margin_start(6)
-        .margin_end(12)
+        .margin_end(6)
         .margin_bottom(12)
         .build();
 
