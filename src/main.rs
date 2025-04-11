@@ -21,7 +21,7 @@ fn build_ui(app: &Application) {
     let img_data: Rc<RefCell<Option<RgbImage>>> = Rc::new(RefCell::new(None));
     let num_layers = Rc::new(RefCell::new(8u8)); // default layers
 
-    // Make the preview area larger and set a minimum size
+    // Make the preview area
     let preview_area = DrawingArea::builder()
         .hexpand(true)
         .vexpand(true)
@@ -29,7 +29,7 @@ fn build_ui(app: &Application) {
 
     preview_area.set_size_request(300, 300);
 
-    // Improved drawing function
+    // Drawing function
     {
         let img_data = img_data.clone();
         let num_layers = num_layers.clone();
@@ -69,7 +69,7 @@ fn build_ui(app: &Application) {
     let open_button = gtk4::Button::from_icon_name("document-open-symbolic");
     let save_button = gtk4::Button::from_icon_name("document-save-symbolic");
 
-    // Create the WindowTitle and store it in an Rc<RefCell>
+    // Create the WindowTitle and store it in an Rc<RefCell> (for adjusting later)
     let window_title = adw::WindowTitle::new("Depthmap App", "");
     let window_title = Rc::new(RefCell::new(window_title));
 
@@ -78,6 +78,7 @@ fn build_ui(app: &Application) {
         .css_classes(["flat"])
         .build();
 
+    // Header config
     header.pack_start(&open_button);
     header.pack_end(&save_button);
 
@@ -85,7 +86,7 @@ fn build_ui(app: &Application) {
     let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 2.0, 64.0, 1.0);
     slider.set_value(8.0);
     slider.set_draw_value(true);
-    slider.set_margin_start(12);
+    slider.set_margin_start(0);
     slider.set_margin_end(12);
     slider.set_margin_top(6);
     slider.set_margin_bottom(6);
@@ -146,13 +147,13 @@ fn build_ui(app: &Application) {
     let content = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Vertical)
         .spacing(6)
-        .margin_start(12)
+        .margin_start(6)
         .margin_end(12)
         .margin_bottom(12)
         .build();
 
     content.append(&preview_area);
-    content.append(&slider_box);  // Use slider_box instead of slider
+    content.append(&slider_box);
 
     let window = ApplicationWindow::builder()
         .application(app)
