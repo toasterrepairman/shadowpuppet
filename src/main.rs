@@ -89,6 +89,58 @@ fn build_ui(app: &Application) {
     slider.set_margin_end(12);
     slider.set_margin_top(6);
     slider.set_margin_bottom(6);
+    slider.set_hexpand(true);
+
+    // Create a SpinButton for numeric entry
+    let spin_button = gtk4::SpinButton::with_range(2.0, 64.0, 1.0);
+    spin_button.set_value(8.0); // Match slider's default
+    spin_button.set_digits(0); // Show only integer values
+    spin_button.set_width_chars(3); // Make it compact
+    spin_button.set_vexpand(false);
+
+    // Create a horizontal box for slider and spin button
+    let slider_box = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .spacing(6)
+        .margin_start(12)
+        .margin_end(12)
+        .margin_top(6)
+        .margin_bottom(6)
+        .hexpand(true)
+        .build();
+
+    slider_box.append(&slider);
+    slider_box.append(&spin_button);
+
+    // Connect slider to spin button
+    {
+        let spin_button = spin_button.clone();
+        slider.connect_value_changed(move |s| {
+            spin_button.set_value(s.value());
+        });
+    }
+
+    // Connect spin button to slider
+    {
+        let slider = slider.clone();
+        let num_layers_for_spin = num_layers.clone();
+        let preview_area_for_spin = preview_area.clone();
+        spin_button.connect_value_changed(move |s| {
+            slider.set_value(s.value());
+            *num_layers_for_spin.borrow_mut() = s.value() as u8;
+            preview_area_for_spin.queue_draw();
+        });
+    }
+
+    // Slider value changed handler
+    {
+        let num_layers_for_slider = num_layers.clone();
+        let preview_area_for_slider = preview_area.clone();
+        slider.connect_value_changed(move |s| {
+            *num_layers_for_slider.borrow_mut() = s.value() as u8;
+            preview_area_for_slider.queue_draw();
+        });
+    }
 
     // Content box with proper spacing and margins
     let content = gtk4::Box::builder()
@@ -100,7 +152,7 @@ fn build_ui(app: &Application) {
         .build();
 
     content.append(&preview_area);
-    content.append(&slider);
+    content.append(&slider_box);  // Use slider_box instead of slider
 
     let window = ApplicationWindow::builder()
         .application(app)
