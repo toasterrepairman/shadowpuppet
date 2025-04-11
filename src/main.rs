@@ -70,6 +70,7 @@ fn build_ui(app: &Application) {
 
     let header = adw::HeaderBar::builder()
         .title_widget(&adw::WindowTitle::new("Depthmap App", ""))
+        .css_classes(["flat"])
         .build();
 
     header.pack_start(&open_button);
