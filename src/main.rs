@@ -10,31 +10,53 @@ use adw::subclass::prelude::*;
 
 fn main() -> glib::ExitCode {
     let app = Application::builder()
-        .application_id("com.example.DepthmapApp")
+        .application_id("com.example.Shadowpuppet")
         .build();
 
     app.connect_activate(build_ui);
     app.run()
 }
-
 fn build_ui(app: &Application) {
     let img_data: Rc<RefCell<Option<RgbImage>>> = Rc::new(RefCell::new(None));
     let num_layers = Rc::new(RefCell::new(8u8)); // default layers
-    let preview_area = DrawingArea::new();
 
-    // Drawing function
+    // Make the preview area larger and set a minimum size
+    let preview_area = DrawingArea::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+
+    preview_area.set_size_request(300, 300);
+
+    // Improved drawing function
     {
         let img_data = img_data.clone();
         let num_layers = num_layers.clone();
-        preview_area.set_draw_func(move |_, cr, _, _| {
+        preview_area.set_draw_func(move |area, cr, width, height| {
             if let Some(ref img) = *img_data.borrow() {
-                let scale = 255.0 / (*num_layers.borrow() as f32 - 1.0);
+                // Calculate scaling factors to fit the image in the preview area
+                let scale_x = width as f64 / img.width() as f64;
+                let scale_y = height as f64 / img.height() as f64;
+                let scale = scale_x.min(scale_y);
+
+                // Clear background
+                cr.set_source_rgb(0.0, 0.0, 0.0);
+                cr.paint().unwrap();
+
+                // Apply scaling
+                cr.scale(scale, scale);
+
+                let scale_val = 255.0 / (*num_layers.borrow() as f32 - 1.0);
+
                 for (x, y, pixel) in img.enumerate_pixels() {
                     let gray = (0.299 * pixel[0] as f32
-                        + 0.587 * pixel[1] as f32
-                        + 0.114 * pixel[2] as f32);
-                    let q = ((gray / scale).round() * scale).clamp(0.0, 255.0) as u8;
-                    cr.set_source_rgb(q as f64 / 255.0, q as f64 / 255.0, q as f64 / 255.0);
+                            + 0.587 * pixel[1] as f32
+                            + 0.114 * pixel[2] as f32);
+                    // Quantize the grayscale value
+                    let quantized = ((gray / scale_val).round() * scale_val).clamp(0.0, 255.0);
+                    let normalized = quantized / 255.0;
+
+                    cr.set_source_rgb(normalized as f64, normalized as f64, normalized as f64);
                     cr.rectangle(x as f64, y as f64, 1.0, 1.0);
                     cr.fill().unwrap();
                 }
@@ -53,21 +75,24 @@ fn build_ui(app: &Application) {
     header.pack_start(&open_button);
     header.pack_end(&save_button);
 
-    let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 2.0, 32.0, 1.0);
+    // Improved slider configuration
+    let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 2.0, 64.0, 1.0);
     slider.set_value(8.0);
     slider.set_draw_value(true);
+    slider.set_margin_start(12);
+    slider.set_margin_end(12);
+    slider.set_margin_top(6);
+    slider.set_margin_bottom(6);
 
-    // Slider change handler
-    {
-        let num_layers = num_layers.clone();
-        let preview_area = preview_area.clone();
-        slider.connect_value_changed(move |s| {
-            *num_layers.borrow_mut() = s.value() as u8;
-            preview_area.queue_draw();
-        });
-    }
+    // Content box with proper spacing and margins
+    let content = gtk4::Box::builder()
+        .orientation(gtk4::Orientation::Vertical)
+        .spacing(6)
+        .margin_start(12)
+        .margin_end(12)
+        .margin_bottom(12)
+        .build();
 
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     content.append(&preview_area);
     content.append(&slider);
 
