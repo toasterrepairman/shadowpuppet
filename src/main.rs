@@ -7,6 +7,7 @@ use image::{DynamicImage, GenericImageView, RgbImage};
 use std::fs::File;
 use std::io::Write;
 use adw::subclass::prelude::*;
+use gio::SimpleAction;
 
 fn main() -> glib::ExitCode {
     let app = Application::builder()
@@ -68,8 +69,12 @@ fn build_ui(app: &Application) {
     let open_button = gtk4::Button::from_icon_name("document-open-symbolic");
     let save_button = gtk4::Button::from_icon_name("document-save-symbolic");
 
+    // Create the WindowTitle and store it in an Rc<RefCell>
+    let window_title = adw::WindowTitle::new("Depthmap App", "");
+    let window_title = Rc::new(RefCell::new(window_title));
+
     let header = adw::HeaderBar::builder()
-        .title_widget(&adw::WindowTitle::new("Depthmap App", ""))
+        .title_widget(&*window_title.borrow())
         .css_classes(["flat"])
         .build();
 
@@ -113,6 +118,7 @@ fn build_ui(app: &Application) {
         let img_data = img_data.clone();
         let preview_area = preview_area.clone();
         let file_chooser_ref = file_chooser_ref.clone();
+        let window_title = window_title.clone();  // Clone it here
 
         open_button.connect_clicked(move |_| {
             let file_chooser = FileChooserNative::builder()
@@ -123,18 +129,25 @@ fn build_ui(app: &Application) {
 
             file_chooser.set_transient_for(Some(&app.active_window().unwrap()));
 
-            // Store the file chooser
             *file_chooser_ref.borrow_mut() = Some(file_chooser.clone());
 
             file_chooser.connect_response({
                 let img_data = img_data.clone();
                 let preview_area = preview_area.clone();
                 let file_chooser_ref = file_chooser_ref.clone();
+                let window_title = window_title.clone();  // Clone it again for the closure
 
                 move |dialog, response| {
                     if response == gtk4::ResponseType::Accept {
                         if let Some(file) = dialog.file() {
                             if let Some(path) = file.path() {
+                                // Update the subtitle with the filename
+                                if let Some(filename) = path.file_name() {
+                                    if let Some(filename_str) = filename.to_str() {
+                                        window_title.borrow().set_subtitle(filename_str);
+                                    }
+                                }
+
                                 if let Ok(img) = image::open(path) {
                                     *img_data.borrow_mut() = Some(img.to_rgb8());
                                     preview_area.queue_draw();
@@ -143,7 +156,6 @@ fn build_ui(app: &Application) {
                         }
                     }
                     dialog.destroy();
-                    // Clear the reference after the dialog is destroyed
                     *file_chooser_ref.borrow_mut() = None;
                 }
             });
@@ -163,6 +175,14 @@ fn build_ui(app: &Application) {
         });
     }
 
+    // ctrl + q close keybind
+    let quit_action = SimpleAction::new("quit", None);
+    quit_action.connect_activate(glib::clone!(@weak window => move |_, _| {
+        window.close();
+    }));
+    window.add_action(&quit_action);
+
+    app.set_accels_for_action("win.quit", &["<Control>q"]);
     window.set_titlebar(Some(&header));
     window.present();
 }
