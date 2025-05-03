@@ -259,17 +259,24 @@ fn save_as_obj(img: &RgbImage, layers: u8, path: &str) {
             let gray = 0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
             let quantized = (gray / 255.0 * (layers as f32 - 1.0)).round() * layer_scale;
             let z = quantized * scale + base_height;
-            writeln!(file, "v {} {} {}", x as f32 * scale, y as f32 * scale, z).unwrap();
+            // Negate the Y coordinate to rotate 180 degrees around X axis
+            writeln!(file, "v {} {} {}",
+                x as f32 * scale,
+                -(y as f32 * scale),
+                z
+            ).unwrap();
         }
     }
 
+    // When writing faces, we need to change the winding order to maintain correct face orientation
     for y in 0..height - 1 {
         for x in 0..width - 1 {
             let v1 = y * width + x + 1;
             let v2 = y * width + x + 2;
             let v3 = (y + 1) * width + x + 2;
             let v4 = (y + 1) * width + x + 1;
-            writeln!(file, "f {} {} {} {}", v1, v2, v3, v4).unwrap();
+            // Reverse the order of vertices to maintain correct face orientation
+            writeln!(file, "f {} {} {} {}", v1, v4, v3, v2).unwrap();
         }
     }
 }
