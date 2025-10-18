@@ -1,6 +1,6 @@
 use adw::prelude::*;
 use gtk4::{glib, gio};
-use gtk4::{Application, ApplicationWindow, Picture, FileChooserNative, FileChooserAction, DrawingArea};
+use gtk4::{Application, FileChooserAction, DrawingArea};
 use std::cell::RefCell;
 use std::rc::Rc;
 use image::{DynamicImage, GenericImageView, RgbImage};
@@ -8,18 +8,23 @@ use std::fs::File;
 use std::io::Write;
 use adw::subclass::prelude::*;
 use gio::SimpleAction;
+use gtk4::cairo;
 
 fn main() -> glib::ExitCode {
-    let app = Application::builder()
+    let app = adw::Application::builder()
         .application_id("com.example.Shadowpuppet")
         .build();
 
     app.connect_activate(build_ui);
     app.run()
 }
-fn build_ui(app: &Application) {
+
+fn build_ui(app: &adw::Application) {
     let img_data: Rc<RefCell<Option<RgbImage>>> = Rc::new(RefCell::new(None));
     let num_layers = Rc::new(RefCell::new(8u8)); // default layers
+
+    // Create toast overlay for notifications
+    let toast_overlay = adw::ToastOverlay::new();
 
     // Make the preview area
     let preview_area = DrawingArea::builder()
@@ -61,58 +66,92 @@ fn build_ui(app: &Application) {
                     cr.rectangle(x as f64, y as f64, 1.0, 1.0);
                     cr.fill().unwrap();
                 }
+            } else {
+                // Show a placeholder when no image is loaded
+                cr.set_source_rgb(0.15, 0.15, 0.15);
+                cr.paint().unwrap();
+
+                // Draw centered text
+                cr.set_source_rgb(0.5, 0.5, 0.5);
+                cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Normal);
+                cr.set_font_size(16.0);
+
+                let text = "No image loaded";
+                let extents = cr.text_extents(text).unwrap();
+                cr.move_to(
+                    (width as f64 - extents.width()) / 2.0,
+                    (height as f64 + extents.height()) / 2.0
+                );
+                cr.show_text(text).unwrap();
             }
         });
     }
 
-    // UI layout
-    let open_button = gtk4::Button::from_icon_name("document-open-symbolic");
-    let save_button = gtk4::Button::from_icon_name("document-save-symbolic");
+    // Wrap preview in a frame for better visual separation
+    let preview_frame = gtk4::Frame::builder()
+        .child(&preview_area)
+        .build();
 
-    // Create the WindowTitle and store it in an Rc<RefCell> (for adjusting later)
+    // UI layout with modern Libadwaita widgets
+    let open_button = gtk4::Button::from_icon_name("document-open-symbolic");
+    open_button.set_tooltip_text(Some("Open Image"));
+
+    let save_button = gtk4::Button::from_icon_name("document-save-symbolic");
+    save_button.set_tooltip_text(Some("Export as OBJ"));
+
+    // Create the WindowTitle
     let window_title = adw::WindowTitle::new("Shadowpuppet", "");
     let window_title = Rc::new(RefCell::new(window_title));
 
     let header = adw::HeaderBar::builder()
         .title_widget(&*window_title.borrow())
-        .css_classes(["flat"])
         .build();
 
     // Header config
     header.pack_start(&open_button);
     header.pack_end(&save_button);
 
-    // Improved slider configuration
+    // Create a preferences group for layer controls with modern styling
+    let layers_label = gtk4::Label::builder()
+        .label("Depth Layers")
+        .halign(gtk4::Align::Start)
+        .build();
+
     let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 2.0, 64.0, 1.0);
     slider.set_value(8.0);
-    slider.set_draw_value(true);
-    slider.set_margin_start(0);
-    slider.set_margin_end(18);
-    slider.set_margin_top(0);
-    slider.set_margin_bottom(12);
+    slider.set_draw_value(false);
     slider.set_hexpand(true);
-    slider.set_vexpand(false);
 
     // Create a SpinButton for numeric entry
     let spin_button = gtk4::SpinButton::with_range(2.0, 64.0, 1.0);
     spin_button.set_value(8.0);
     spin_button.set_digits(0);
     spin_button.set_width_chars(3);
-    spin_button.set_vexpand(false);
-    spin_button.set_valign(gtk4::Align::Center);
 
     // Create a horizontal box for slider and spin button
     let slider_box = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Horizontal)
-        .spacing(6)
-        .margin_start(12)
-        .margin_end(12)
-        .margin_top(0)
+        .spacing(12)
         .hexpand(true)
         .build();
 
     slider_box.append(&slider);
     slider_box.append(&spin_button);
+
+    // Create an action row for the layer control
+    let layers_row = adw::ActionRow::builder()
+        .title("Depth Layers")
+        .subtitle("Number of depth levels in the output")
+        .build();
+
+    layers_row.add_suffix(&slider_box);
+
+    // Create preferences group
+    let preferences_group = adw::PreferencesGroup::builder()
+        .title("Output Settings")
+        .build();
+
+    preferences_group.add(&layers_row);
 
     // Connect slider to spin button
     {
@@ -144,27 +183,52 @@ fn build_ui(app: &Application) {
         });
     }
 
-    // Content box with proper spacing and margins
+    // Use AdwClamp for better responsive design
+    let preview_clamp = adw::Clamp::builder()
+        .maximum_size(800)
+        .tightening_threshold(600)
+        .child(&preview_frame)
+        .build();
+
+    // Content box with proper spacing
     let content = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Vertical)
-        .spacing(6)
-        .margin_start(6)
-        .margin_end(6)
+        .spacing(24)
+        .margin_start(12)
+        .margin_end(12)
+        .margin_top(12)
         .margin_bottom(12)
         .build();
 
-    content.append(&preview_area);
-    content.append(&slider_box);
+    content.append(&preview_clamp);
+    content.append(&preferences_group);
 
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Depthmap App")
-        .default_width(400)
-        .default_height(500)
+    // Add scrolled window for better handling of smaller screens
+    let scrolled_window = gtk4::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .vscrollbar_policy(gtk4::PolicyType::Automatic)
         .child(&content)
         .build();
 
-    let file_chooser_ref = Rc::new(RefCell::new(None::<FileChooserNative>));
+    toast_overlay.set_child(Some(&scrolled_window));
+
+    // Use AdwToolbarView for proper GNOME app structure
+    let toolbar_view = adw::ToolbarView::builder()
+        .content(&toast_overlay)
+        .build();
+
+    toolbar_view.add_top_bar(&header);
+
+    // Use AdwApplicationWindow instead of ApplicationWindow
+    let window = adw::ApplicationWindow::builder()
+        .application(app)
+        .title("Shadowpuppet")
+        .default_width(500)
+        .default_height(600)
+        .content(&toolbar_view)
+        .build();
+
+    let file_chooser_ref = Rc::new(RefCell::new(None::<gtk4::FileChooserNative>));
 
     // Open button handler
     {
@@ -172,14 +236,32 @@ fn build_ui(app: &Application) {
         let img_data = img_data.clone();
         let preview_area = preview_area.clone();
         let file_chooser_ref = file_chooser_ref.clone();
-        let window_title = window_title.clone();  // Clone it here
+        let window_title = window_title.clone();
+        let toast_overlay = toast_overlay.clone();
 
         open_button.connect_clicked(move |_| {
-            let file_chooser = FileChooserNative::builder()
+            let file_chooser = gtk4::FileChooserNative::builder()
                 .title("Open Image")
                 .action(FileChooserAction::Open)
                 .accept_label("Open")
                 .build();
+
+            // Add image file filters
+            let filter = gtk4::FileFilter::new();
+            filter.set_name(Some("Image files"));
+            filter.add_mime_type("image/*");
+            filter.add_pattern("*.png");
+            filter.add_pattern("*.jpg");
+            filter.add_pattern("*.jpeg");
+            filter.add_pattern("*.bmp");
+            filter.add_pattern("*.gif");
+            filter.add_pattern("*.webp");
+            file_chooser.add_filter(&filter);
+
+            let filter_all = gtk4::FileFilter::new();
+            filter_all.set_name(Some("All files"));
+            filter_all.add_pattern("*");
+            file_chooser.add_filter(&filter_all);
 
             file_chooser.set_transient_for(Some(&app.active_window().unwrap()));
 
@@ -189,7 +271,8 @@ fn build_ui(app: &Application) {
                 let img_data = img_data.clone();
                 let preview_area = preview_area.clone();
                 let file_chooser_ref = file_chooser_ref.clone();
-                let window_title = window_title.clone();  // Clone it again for the closure
+                let window_title = window_title.clone();
+                let toast_overlay = toast_overlay.clone();
 
                 move |dialog, response| {
                     if response == gtk4::ResponseType::Accept {
@@ -202,9 +285,19 @@ fn build_ui(app: &Application) {
                                     }
                                 }
 
-                                if let Ok(img) = image::open(path) {
-                                    *img_data.borrow_mut() = Some(img.to_rgb8());
-                                    preview_area.queue_draw();
+                                match image::open(&path) {
+                                    Ok(img) => {
+                                        *img_data.borrow_mut() = Some(img.to_rgb8());
+                                        preview_area.queue_draw();
+
+                                        let toast = adw::Toast::new("Image loaded successfully");
+                                        toast_overlay.add_toast(toast);
+                                    }
+                                    Err(e) => {
+                                        let toast = adw::Toast::new(&format!("Failed to load image: {}", e));
+                                        toast.set_timeout(5);
+                                        toast_overlay.add_toast(toast);
+                                    }
                                 }
                             }
                         }
@@ -222,36 +315,113 @@ fn build_ui(app: &Application) {
     {
         let img_data = img_data.clone();
         let num_layers = num_layers.clone();
+        let toast_overlay = toast_overlay.clone();
+        let window = window.clone();
+
         save_button.connect_clicked(move |_| {
             if let Some(ref img) = *img_data.borrow() {
-                save_as_obj(img, *num_layers.borrow(), "output.obj");
+                let file_chooser = gtk4::FileChooserNative::builder()
+                    .title("Export as OBJ")
+                    .action(FileChooserAction::Save)
+                    .accept_label("Export")
+                    .build();
+
+                // Add OBJ file filter
+                let filter = gtk4::FileFilter::new();
+                filter.set_name(Some("OBJ files"));
+                filter.add_pattern("*.obj");
+                file_chooser.add_filter(&filter);
+
+                let filter_all = gtk4::FileFilter::new();
+                filter_all.set_name(Some("All files"));
+                filter_all.add_pattern("*");
+                file_chooser.add_filter(&filter_all);
+
+                file_chooser.set_current_name("output.obj");
+                file_chooser.set_transient_for(Some(&window));
+
+                let img_clone = img.clone();
+                let layers = *num_layers.borrow();
+                let toast_overlay = toast_overlay.clone();
+
+                file_chooser.connect_response(move |dialog, response| {
+                    if response == gtk4::ResponseType::Accept {
+                        if let Some(file) = dialog.file() {
+                            if let Some(path) = file.path() {
+                                match save_as_obj(&img_clone, layers, path.to_str().unwrap()) {
+                                    Ok(_) => {
+                                        let toast = adw::Toast::new("OBJ file exported successfully");
+                                        toast_overlay.add_toast(toast);
+                                    }
+                                    Err(e) => {
+                                        let toast = adw::Toast::new(&format!("Failed to export: {}", e));
+                                        toast.set_timeout(5);
+                                        toast_overlay.add_toast(toast);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    dialog.destroy();
+                });
+
+                file_chooser.show();
+            } else {
+                let toast = adw::Toast::new("Please load an image first");
+                toast.set_timeout(3);
+                toast_overlay.add_toast(toast);
             }
         });
     }
 
     // ctrl + q close keybind
     let quit_action = SimpleAction::new("quit", None);
-    quit_action.connect_activate(glib::clone!(@weak window => move |_, _| {
-        window.close();
-    }));
+    {
+        let window = window.clone();
+        quit_action.connect_activate(move |_, _| {
+            window.close();
+        });
+    }
     window.add_action(&quit_action);
 
+    // ctrl + o open keybind
+    let open_action = SimpleAction::new("open", None);
+    {
+        let open_button = open_button.clone();
+        open_action.connect_activate(move |_, _| {
+            open_button.emit_clicked();
+        });
+    }
+    window.add_action(&open_action);
+
+    // ctrl + s save keybind
+    let save_action = SimpleAction::new("save", None);
+    {
+        let save_button = save_button.clone();
+        save_action.connect_activate(move |_, _| {
+            save_button.emit_clicked();
+        });
+    }
+    window.add_action(&save_action);
+
     app.set_accels_for_action("win.quit", &["<Control>q"]);
-    window.set_titlebar(Some(&header));
+    app.set_accels_for_action("win.open", &["<Control>o"]);
+    app.set_accels_for_action("win.save", &["<Control>s"]);
+
     window.present();
 }
 
-// Save grayscale .obj
-fn save_as_obj(img: &RgbImage, layers: u8, path: &str) {
+// Save grayscale .obj with error handling
+fn save_as_obj(img: &RgbImage, layers: u8, path: &str) -> std::io::Result<()> {
     let width = img.width() as usize;
     let height = img.height() as usize;
     let scale = 0.1;
     let base_height = 0.0;
-    let mut file = File::create(path).expect("Can't create OBJ file");
+    let mut file = File::create(path)?;
 
     let layer_scale = 1.0 / (layers as f32 - 1.0);
 
-    writeln!(file, "mtllib material.mtl\nusemtl plane_material\nnewmtl plane_material\nKd 1.0 1.0 1.0\nKa 0.0 0.0 0.0").unwrap();
+    writeln!(file, "mtllib material.mtl\nusemtl plane_material\nnewmtl plane_material\nKd 1.0 1.0 1.0\nKa 0.0 0.0 0.0")?;
 
     for y in 0..height {
         for x in 0..width {
@@ -264,7 +434,7 @@ fn save_as_obj(img: &RgbImage, layers: u8, path: &str) {
                 x as f32 * scale,
                 -(y as f32 * scale),
                 z
-            ).unwrap();
+            )?;
         }
     }
 
@@ -276,7 +446,9 @@ fn save_as_obj(img: &RgbImage, layers: u8, path: &str) {
             let v3 = (y + 1) * width + x + 2;
             let v4 = (y + 1) * width + x + 1;
             // Reverse the order of vertices to maintain correct face orientation
-            writeln!(file, "f {} {} {} {}", v1, v4, v3, v2).unwrap();
+            writeln!(file, "f {} {} {} {}", v1, v4, v3, v2)?;
         }
     }
+
+    Ok(())
 }
