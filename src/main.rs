@@ -34,37 +34,85 @@ fn build_ui(app: &adw::Application) {
 
     preview_area.set_size_request(300, 300);
 
+    // Cache for the processed image surface
+    let cached_surface: Rc<RefCell<Option<cairo::ImageSurface>>> = Rc::new(RefCell::new(None));
+    let cached_layers: Rc<RefCell<u8>> = Rc::new(RefCell::new(8));
+
     // Drawing function
     {
         let img_data = img_data.clone();
         let num_layers = num_layers.clone();
+        let cached_surface = cached_surface.clone();
+        let cached_layers = cached_layers.clone();
+
         preview_area.set_draw_func(move |area, cr, width, height| {
             if let Some(ref img) = *img_data.borrow() {
-                // Calculate scaling factors to fit the image in the preview area
-                let scale_x = width as f64 / img.width() as f64;
-                let scale_y = height as f64 / img.height() as f64;
-                let scale = scale_x.min(scale_y);
-
                 // Clear background
-                cr.set_source_rgb(0.0, 0.0, 0.0);
+                cr.set_source_rgb(0.15, 0.15, 0.15);
                 cr.paint().unwrap();
 
-                // Apply scaling
-                cr.scale(scale, scale);
+                let current_layers = *num_layers.borrow();
 
-                let scale_val = 255.0 / (*num_layers.borrow() as f32 - 1.0);
+                // Regenerate surface if layers changed or surface doesn't exist
+                if cached_surface.borrow().is_none() || *cached_layers.borrow() != current_layers {
+                    let img_width = img.width() as i32;
+                    let img_height = img.height() as i32;
 
-                for (x, y, pixel) in img.enumerate_pixels() {
-                    let gray = (0.299 * pixel[0] as f32
-                            + 0.587 * pixel[1] as f32
-                            + 0.114 * pixel[2] as f32);
-                    // Quantize the grayscale value
-                    let quantized = ((gray / scale_val).round() * scale_val).clamp(0.0, 255.0);
-                    let normalized = quantized / 255.0;
+                    // Create an image surface for the processed image
+                    let surface = cairo::ImageSurface::create(
+                        cairo::Format::Rgb24,
+                        img_width,
+                        img_height,
+                    ).unwrap();
 
-                    cr.set_source_rgb(normalized as f64, normalized as f64, normalized as f64);
-                    cr.rectangle(x as f64, y as f64, 1.0, 1.0);
-                    cr.fill().unwrap();
+                    {
+                        let cr_img = cairo::Context::new(&surface).unwrap();
+                        let scale_val = 255.0 / (current_layers as f32 - 1.0);
+
+                        // Process the entire image into the surface
+                        for (x, y, pixel) in img.enumerate_pixels() {
+                            let gray = (0.299 * pixel[0] as f32
+                                    + 0.587 * pixel[1] as f32
+                                    + 0.114 * pixel[2] as f32);
+                            // Quantize the grayscale value
+                            let quantized = ((gray / scale_val).round() * scale_val).clamp(0.0, 255.0);
+                            let normalized = quantized / 255.0;
+
+                            cr_img.set_source_rgb(normalized as f64, normalized as f64, normalized as f64);
+                            cr_img.rectangle(x as f64, y as f64, 1.0, 1.0);
+                            cr_img.fill().unwrap();
+                        }
+                    }
+
+                    *cached_surface.borrow_mut() = Some(surface);
+                    *cached_layers.borrow_mut() = current_layers;
+                }
+
+                // Draw the cached surface with proper scaling and centering
+                if let Some(ref surface) = *cached_surface.borrow() {
+                    let img_width = img.width() as f64;
+                    let img_height = img.height() as f64;
+
+                    // Calculate scaling to fit within the drawing area
+                    let scale_x = width as f64 / img_width;
+                    let scale_y = height as f64 / img_height;
+                    let scale = scale_x.min(scale_y);
+
+                    // Calculate centering offset
+                    let scaled_width = img_width * scale;
+                    let scaled_height = img_height * scale;
+                    let offset_x = (width as f64 - scaled_width) / 2.0;
+                    let offset_y = (height as f64 - scaled_height) / 2.0;
+
+                    // Apply transformations
+                    cr.save().unwrap();
+                    cr.translate(offset_x, offset_y);
+                    cr.scale(scale, scale);
+
+                    // Draw the surface
+                    cr.set_source_surface(surface, 0.0, 0.0).unwrap();
+                    cr.paint().unwrap();
+                    cr.restore().unwrap();
                 }
             } else {
                 // Show a placeholder when no image is loaded
@@ -238,6 +286,7 @@ fn build_ui(app: &adw::Application) {
         let file_chooser_ref = file_chooser_ref.clone();
         let window_title = window_title.clone();
         let toast_overlay = toast_overlay.clone();
+        let cached_surface = cached_surface.clone();
 
         open_button.connect_clicked(move |_| {
             let file_chooser = gtk4::FileChooserNative::builder()
@@ -273,6 +322,7 @@ fn build_ui(app: &adw::Application) {
                 let file_chooser_ref = file_chooser_ref.clone();
                 let window_title = window_title.clone();
                 let toast_overlay = toast_overlay.clone();
+                let cached_surface = cached_surface.clone();
 
                 move |dialog, response| {
                     if response == gtk4::ResponseType::Accept {
@@ -288,6 +338,8 @@ fn build_ui(app: &adw::Application) {
                                 match image::open(&path) {
                                     Ok(img) => {
                                         *img_data.borrow_mut() = Some(img.to_rgb8());
+                                        // Clear the cache when loading a new image
+                                        *cached_surface.borrow_mut() = None;
                                         preview_area.queue_draw();
 
                                         let toast = adw::Toast::new("Image loaded successfully");
