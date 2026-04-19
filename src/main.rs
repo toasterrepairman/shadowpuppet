@@ -43,11 +43,20 @@ fn build_ui(app: &adw::Application) {
         let cached_layers = cached_layers.clone();
 
         preview_area.set_draw_func(move |area, cr, width, height| {
-            if let Some(ref img) = *img_data.borrow() {
-                // Clear background
+            let theme_bg = area.style_context().lookup_color("window_bg_color");
+            if let Some(color) = theme_bg {
+                cr.set_source_rgba(
+                    color.red() as f64,
+                    color.green() as f64,
+                    color.blue() as f64,
+                    color.alpha() as f64,
+                );
+            } else {
                 cr.set_source_rgb(0.15, 0.15, 0.15);
-                cr.paint().unwrap();
+            }
+            cr.paint().unwrap();
 
+            if let Some(ref img) = *img_data.borrow() {
                 let current_layers = *num_layers.borrow();
 
                 // Regenerate surface if layers changed or surface doesn't exist
@@ -120,12 +129,30 @@ fn build_ui(app: &adw::Application) {
                     cr.restore().unwrap();
                 }
             } else {
-                // Show a placeholder when no image is loaded
-                cr.set_source_rgb(0.15, 0.15, 0.15);
+                let bg = area.style_context().lookup_color("window_bg_color");
+                if let Some(color) = bg {
+                    cr.set_source_rgba(
+                        color.red() as f64,
+                        color.green() as f64,
+                        color.blue() as f64,
+                        color.alpha() as f64,
+                    );
+                } else {
+                    cr.set_source_rgb(0.15, 0.15, 0.15);
+                }
                 cr.paint().unwrap();
 
-                // Draw centered text
-                cr.set_source_rgb(0.5, 0.5, 0.5);
+                let fg = area.style_context().lookup_color("window_fg_color");
+                if let Some(color) = fg {
+                    cr.set_source_rgba(
+                        color.red() as f64,
+                        color.green() as f64,
+                        color.blue() as f64,
+                        color.alpha() as f64,
+                    );
+                } else {
+                    cr.set_source_rgb(0.5, 0.5, 0.5);
+                }
                 cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Normal);
                 cr.set_font_size(16.0);
 
@@ -188,6 +215,9 @@ fn build_ui(app: &adw::Application) {
 
     slider_box.append(&slider);
     slider_box.append(&spin_button);
+    slider_box.set_valign(gtk4::Align::Center);
+    slider.set_valign(gtk4::Align::Center);
+    spin_button.set_valign(gtk4::Align::Center);
 
     // Create an action row for the layer control
     let layers_row = adw::ActionRow::builder()
@@ -273,9 +303,11 @@ fn build_ui(app: &adw::Application) {
         .application(app)
         .title("Shadowpuppet")
         .default_width(500)
-        .default_height(600)
+        .default_height(700)
         .content(&toolbar_view)
         .build();
+
+    window.set_size_request(-1, 500);
 
     let file_chooser_ref = Rc::new(RefCell::new(None::<gtk4::FileChooserNative>));
 
