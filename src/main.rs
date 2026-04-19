@@ -1,14 +1,14 @@
 use adw::prelude::*;
-use gtk4::{glib, gio};
-use gtk4::{Application, FileChooserAction, DrawingArea};
-use std::cell::RefCell;
-use std::rc::Rc;
-use image::{DynamicImage, GenericImageView, RgbImage};
-use std::fs::File;
-use std::io::Write;
 use adw::subclass::prelude::*;
 use gio::SimpleAction;
 use gtk4::cairo;
+use gtk4::{gio, glib};
+use gtk4::{Application, DrawingArea, FileChooserAction};
+use image::{DynamicImage, GenericImageView, RgbImage};
+use std::cell::RefCell;
+use std::fs::File;
+use std::io::Write;
+use std::rc::Rc;
 
 fn main() -> glib::ExitCode {
     let app = adw::Application::builder()
@@ -27,10 +27,7 @@ fn build_ui(app: &adw::Application) {
     let toast_overlay = adw::ToastOverlay::new();
 
     // Make the preview area
-    let preview_area = DrawingArea::builder()
-        .hexpand(true)
-        .vexpand(true)
-        .build();
+    let preview_area = DrawingArea::builder().hexpand(true).vexpand(true).build();
 
     preview_area.set_size_request(300, 300);
 
@@ -59,28 +56,36 @@ fn build_ui(app: &adw::Application) {
                     let img_height = img.height() as i32;
 
                     // Create an image surface for the processed image
-                    let surface = cairo::ImageSurface::create(
-                        cairo::Format::Rgb24,
-                        img_width,
-                        img_height,
-                    ).unwrap();
+                    let mut surface =
+                        cairo::ImageSurface::create(cairo::Format::Rgb24, img_width, img_height)
+                            .unwrap();
 
                     {
-                        let cr_img = cairo::Context::new(&surface).unwrap();
                         let scale_val = 255.0 / (current_layers as f32 - 1.0);
+                        let stride = surface.stride() as usize;
+                        let width = img_width as usize;
+                        let height = img_height as usize;
 
-                        // Process the entire image into the surface
-                        for (x, y, pixel) in img.enumerate_pixels() {
-                            let gray = (0.299 * pixel[0] as f32
-                                    + 0.587 * pixel[1] as f32
-                                    + 0.114 * pixel[2] as f32);
-                            // Quantize the grayscale value
-                            let quantized = ((gray / scale_val).round() * scale_val).clamp(0.0, 255.0);
-                            let normalized = quantized / 255.0;
+                        let mut data = surface.data().unwrap();
+                        let pixels = img.as_raw();
 
-                            cr_img.set_source_rgb(normalized as f64, normalized as f64, normalized as f64);
-                            cr_img.rectangle(x as f64, y as f64, 1.0, 1.0);
-                            cr_img.fill().unwrap();
+                        for y in 0..height {
+                            let row_offset = y * stride;
+                            let src_offset = y * width * 3;
+                            for x in 0..width {
+                                let si = src_offset + x * 3;
+                                let r = pixels[si] as f32;
+                                let g = pixels[si + 1] as f32;
+                                let b = pixels[si + 2] as f32;
+                                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                                let quantized =
+                                    ((gray / scale_val).round() * scale_val).clamp(0.0, 255.0);
+                                let v = quantized as u8;
+                                let di = row_offset + x * 4;
+                                data[di] = v;
+                                data[di + 1] = v;
+                                data[di + 2] = v;
+                            }
                         }
                     }
 
@@ -128,7 +133,7 @@ fn build_ui(app: &adw::Application) {
                 let extents = cr.text_extents(text).unwrap();
                 cr.move_to(
                     (width as f64 - extents.width()) / 2.0,
-                    (height as f64 + extents.height()) / 2.0
+                    (height as f64 + extents.height()) / 2.0,
                 );
                 cr.show_text(text).unwrap();
             }
@@ -136,9 +141,7 @@ fn build_ui(app: &adw::Application) {
     }
 
     // Wrap preview in a frame for better visual separation
-    let preview_frame = gtk4::Frame::builder()
-        .child(&preview_area)
-        .build();
+    let preview_frame = gtk4::Frame::builder().child(&preview_area).build();
 
     // UI layout with modern Libadwaita widgets
     let open_button = gtk4::Button::from_icon_name("document-open-symbolic");
@@ -261,9 +264,7 @@ fn build_ui(app: &adw::Application) {
     toast_overlay.set_child(Some(&scrolled_window));
 
     // Use AdwToolbarView for proper GNOME app structure
-    let toolbar_view = adw::ToolbarView::builder()
-        .content(&toast_overlay)
-        .build();
+    let toolbar_view = adw::ToolbarView::builder().content(&toast_overlay).build();
 
     toolbar_view.add_top_bar(&header);
 
@@ -346,7 +347,10 @@ fn build_ui(app: &adw::Application) {
                                         toast_overlay.add_toast(toast);
                                     }
                                     Err(e) => {
-                                        let toast = adw::Toast::new(&format!("Failed to load image: {}", e));
+                                        let toast = adw::Toast::new(&format!(
+                                            "Failed to load image: {}",
+                                            e
+                                        ));
                                         toast.set_timeout(5);
                                         toast_overlay.add_toast(toast);
                                     }
@@ -402,11 +406,13 @@ fn build_ui(app: &adw::Application) {
                             if let Some(path) = file.path() {
                                 match save_as_obj(&img_clone, layers, path.to_str().unwrap()) {
                                     Ok(_) => {
-                                        let toast = adw::Toast::new("OBJ file exported successfully");
+                                        let toast =
+                                            adw::Toast::new("OBJ file exported successfully");
                                         toast_overlay.add_toast(toast);
                                     }
                                     Err(e) => {
-                                        let toast = adw::Toast::new(&format!("Failed to export: {}", e));
+                                        let toast =
+                                            adw::Toast::new(&format!("Failed to export: {}", e));
                                         toast.set_timeout(5);
                                         toast_overlay.add_toast(toast);
                                     }
@@ -482,11 +488,7 @@ fn save_as_obj(img: &RgbImage, layers: u8, path: &str) -> std::io::Result<()> {
             let quantized = (gray / 255.0 * (layers as f32 - 1.0)).round() * layer_scale;
             let z = quantized * scale + base_height;
             // Negate the Y coordinate to rotate 180 degrees around X axis
-            writeln!(file, "v {} {} {}",
-                x as f32 * scale,
-                -(y as f32 * scale),
-                z
-            )?;
+            writeln!(file, "v {} {} {}", x as f32 * scale, -(y as f32 * scale), z)?;
         }
     }
 
